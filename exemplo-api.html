@@ -81,6 +81,50 @@
             border-radius: 5px;
             margin: 10px 0;
         }
+        .clientes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .cliente-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .cliente-card:hover {
+            background: #ec0000;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .cliente-card.selected {
+            background: #ec0000;
+            color: white;
+            border-color: #cc0000;
+        }
+        .cliente-id {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+        .cliente-info {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .filtro-resultado {
+            margin: 10px 0;
+            color: #666;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -94,9 +138,19 @@
     </div>
 
     <div class="container">
-        <h2>🔍 Buscar Cliente</h2>
+        <h2>� Lista de Clientes</h2>
         <div class="search-box">
-            <input type="text" id="clienteId" placeholder="Digite o ID do cliente (ex: CNPJ_09999)">
+            <input type="text" id="filtroClientes" placeholder="Filtrar clientes por ID ou CNAE...">
+        </div>
+        <div id="listaClientesContainer">
+            <div class="loading">Carregando lista de clientes...</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>�🔍 Buscar Cliente</h2>
+        <div class="search-box">
+            <input type="text" id="clienteId" placeholder="Digite o ID do cliente (ex: CNPJ_09999) ou selecione da lista acima">
             <button onclick="buscarCliente()">Buscar</button>
         </div>
         <div id="clienteResultado"></div>
@@ -120,6 +174,10 @@
         // URL base da API
         const API_BASE = '/api';
 
+        // Variáveis globais
+        let todosClientes = [];
+        let clienteFiltrados = [];
+
         // Função para formatar moeda
         function formatCurrency(value) {
             return new Intl.NumberFormat('pt-BR', {
@@ -132,6 +190,90 @@
         function formatDate(dateString) {
             if (!dateString) return 'N/A';
             return new Date(dateString).toLocaleDateString('pt-BR');
+        }
+
+        // Carregar lista de todos os clientes
+        async function carregarListaClientes() {
+            try {
+                const response = await fetch(`${API_BASE}/clientes`);
+                const data = await response.json();
+                todosClientes = data.data;
+                clienteFiltrados = todosClientes;
+                renderizarListaClientes(clienteFiltrados);
+            } catch (error) {
+                document.getElementById('listaClientesContainer').innerHTML = 
+                    '<div class="error">Erro ao carregar lista de clientes</div>';
+                console.error('Erro:', error);
+            }
+        }
+
+        // Renderizar lista de clientes
+        function renderizarListaClientes(clientes) {
+            const container = document.getElementById('listaClientesContainer');
+            
+            if (clientes.length === 0) {
+                container.innerHTML = '<div class="filtro-resultado">Nenhum cliente encontrado</div>';
+                return;
+            }
+
+            const clientesLimitados = clientes.slice(0, 50); // Limitar a 50 clientes para performance
+            
+            const html = `
+                <div class="filtro-resultado">
+                    Mostrando ${clientesLimitados.length} de ${clientes.length} clientes
+                    ${clientes.length > 50 ? '(primeiros 50)' : ''}
+                </div>
+                <div class="clientes-grid">
+                    ${clientesLimitados.map(cliente => `
+                        <div class="cliente-card" onclick="selecionarCliente('${cliente.ID}')">
+                            <div class="cliente-id">${cliente.ID}</div>
+                            <div class="cliente-info">
+                                CNAE: ${cliente.DS_CNAE || 'N/A'}<br>
+                                Faturamento: ${formatCurrency(cliente.VL_FATU || 0)}<br>
+                                Saldo: ${formatCurrency(cliente.VL_SLDO || 0)}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        // Selecionar cliente da lista
+        function selecionarCliente(clienteId) {
+            document.getElementById('clienteId').value = clienteId;
+            
+            // Destacar o cliente selecionado
+            document.querySelectorAll('.cliente-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.target.closest('.cliente-card').classList.add('selected');
+            
+            // Fazer scroll para a seção de busca
+            const buscarSection = document.querySelector('h2').parentNode;
+            if (buscarSection) {
+                buscarSection.scrollIntoView({ 
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        }
+
+        // Filtrar clientes
+        function filtrarClientes() {
+            const filtro = document.getElementById('filtroClientes').value.toLowerCase();
+            
+            if (!filtro) {
+                clienteFiltrados = todosClientes;
+            } else {
+                clienteFiltrados = todosClientes.filter(cliente => 
+                    cliente.ID.toLowerCase().includes(filtro) ||
+                    (cliente.DS_CNAE && cliente.DS_CNAE.toLowerCase().includes(filtro))
+                );
+            }
+            
+            renderizarListaClientes(clienteFiltrados);
         }
 
         // Carregar estatísticas
@@ -304,8 +446,12 @@
             }
         });
 
+        // Event listener para filtro de clientes
+        document.getElementById('filtroClientes').addEventListener('input', filtrarClientes);
+
         // Carregar dados iniciais quando a página carregar
         window.addEventListener('load', function() {
+            carregarListaClientes();
             carregarEstatisticas();
             carregarTransacoes();
             carregarCNAE();

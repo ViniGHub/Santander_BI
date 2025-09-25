@@ -65,6 +65,11 @@ class SantanderBIAPI {
 // Instância global da API
 const api = new SantanderBIAPI();
 
+// Variáveis globais para controle do dropdown
+let todosClientes = [];
+let dropdownVisible = false;
+let searchTimeout = null;
+
 // Funções utilitárias para formatação
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -200,6 +205,125 @@ function updateTransactionsTable(transacoes) {
   });
 }
 
+// Carregar todos os clientes para o filtro
+async function carregarTodosClientes() {
+  if (todosClientes.length === 0) {
+    try {
+      const clientesData = await api.getClientes();
+      
+      // Remover duplicatas baseado no ID do cliente
+      todosClientes = clientesData.filter((cliente, index, array) => 
+        array.findIndex(c => c.ID === cliente.ID) === index
+      );
+      
+      console.log(`${todosClientes.length} clientes únicos carregados para filtro (de ${clientesData.length} registros totais)`);
+      
+      // Log para debug - verificar se há duplicatas
+      const totalOriginal = clientesData.length;
+      const totalUnicos = todosClientes.length;
+      if (totalOriginal !== totalUnicos) {
+        console.warn(`⚠️ Removidas ${totalOriginal - totalUnicos} duplicatas de clientes`);
+      }
+      
+    } catch (error) {
+      console.error('Erro ao carregar clientes:', error);
+      showError('Erro ao carregar lista de clientes');
+    }
+  }
+}
+
+// Filtrar e exibir clientes no dropdown
+function filtrarClientesDropdown(searchTerm) {
+  const dropdown = document.getElementById('clientesDropdown');
+  if (!dropdown) return;
+
+  // Limpar timeout anterior
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
+  }
+
+  // Se não há termo de busca, esconder dropdown
+  if (!searchTerm || searchTerm.length < 2) {
+    esconderDropdown();
+    return;
+  }
+
+  // Filtrar clientes
+  searchTimeout = setTimeout(() => {
+    const termoBusca = searchTerm.toLowerCase();
+    
+    // Filtrar e remover duplicatas baseado no ID
+    const clientesFiltrados = todosClientes
+      .filter(cliente => 
+        cliente.ID.toLowerCase().includes(termoBusca) ||
+        (cliente.DS_CNAE && cliente.DS_CNAE.toLowerCase().includes(termoBusca))
+      )
+      .filter((cliente, index, array) => 
+        // Remover duplicatas - manter apenas a primeira ocorrência de cada ID
+        array.findIndex(c => c.ID === cliente.ID) === index
+      )
+      .slice(0, 10); // Limitar a 10 resultados
+
+    console.log(`Filtro aplicado: "${searchTerm}" - ${clientesFiltrados.length} clientes únicos encontrados`);
+    mostrarDropdown(clientesFiltrados);
+  }, 300); // Delay de 300ms para evitar muitas chamadas
+}
+
+// Mostrar dropdown com clientes filtrados
+function mostrarDropdown(clientes) {
+  const dropdown = document.getElementById('clientesDropdown');
+  if (!dropdown) return;
+
+  if (clientes.length === 0) {
+    dropdown.innerHTML = '<div class="dropdown-no-results">Nenhum cliente encontrado</div>';
+  } else {
+    // Garantir que não há duplicatas pelo ID (proteção extra)
+    const clientesUnicos = clientes.filter((cliente, index, array) => 
+      array.findIndex(c => c.ID === cliente.ID) === index
+    );
+    
+    dropdown.innerHTML = clientesUnicos.map(cliente => `
+      <div class="cliente-dropdown-item" onclick="selecionarClienteDropdown('${cliente.ID.replace(/'/g, "\\'")}')">
+        <div class="cliente-dropdown-id">${cliente.ID}</div>
+        <div class="cliente-dropdown-info">
+          CNAE: ${cliente.DS_CNAE || 'N/A'} | 
+          Faturamento: ${formatCurrency(cliente.VL_FATU || 0)} | 
+          Saldo: ${formatCurrency(cliente.VL_SLDO || 0)}
+        </div>
+      </div>
+    `).join('');
+    
+    // Log para debug
+    if (clientes.length !== clientesUnicos.length) {
+      console.warn(`⚠️ Removidas ${clientes.length - clientesUnicos.length} duplicatas na exibição do dropdown`);
+    }
+  }
+
+  dropdown.style.display = 'block';
+  dropdownVisible = true;
+}
+
+// Esconder dropdown
+function esconderDropdown() {
+  const dropdown = document.getElementById('clientesDropdown');
+  if (dropdown) {
+    dropdown.style.display = 'none';
+    dropdownVisible = false;
+  }
+}
+
+// Selecionar cliente do dropdown
+function selecionarClienteDropdown(clienteId) {
+  const searchInput = document.getElementById('clienteSearch');
+  if (searchInput) {
+    searchInput.value = clienteId;
+  }
+  esconderDropdown();
+  
+  // Executar busca automaticamente
+  searchCliente();
+}
+
 // Buscar dados de um cliente específico
 async function searchCliente() {
   const clienteId = document.getElementById('clienteSearch')?.value;
@@ -267,6 +391,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Carregar dados iniciais
   loadDashboardData();
   
+  // Carregar lista de clientes para filtro
+  carregarTodosClientes();
+  
   // Configurar event listeners
   const searchButton = document.getElementById('searchClienteBtn');
   if (searchButton) {
@@ -275,9 +402,47 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const searchInput = document.getElementById('clienteSearch');
   if (searchInput) {
+    // Enter para buscar
     searchInput.addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
+        esconderDropdown();
         searchCliente();
+      }
+    });
+
+    // Input para filtrar dropdown
+    searchInput.addEventListener('input', function(e) {
+      const searchTerm = e.target.value.trim();
+      filtrarClientesDropdown(searchTerm);
+    });
+
+    // Focus para mostrar dropdown se há texto
+    searchInput.addEventListener('focus', function(e) {
+      const searchTerm = e.target.value.trim();
+      if (searchTerm.length >= 2) {
+        filtrarClientesDropdown(searchTerm);
+      }
+    });
+
+    // Esconder dropdown ao clicar fora
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.search-input-wrapper')) {
+        esconderDropdown();
+      }
+    });
+
+    // Teclas de navegação no dropdown
+    searchInput.addEventListener('keydown', function(e) {
+      if (dropdownVisible) {
+        const dropdown = document.getElementById('clientesDropdown');
+        const items = dropdown?.querySelectorAll('.cliente-dropdown-item');
+        
+        if (e.key === 'Escape') {
+          esconderDropdown();
+        } else if (e.key === 'ArrowDown' && items?.length > 0) {
+          e.preventDefault();
+          items[0].focus();
+        }
       }
     });
   }
@@ -288,3 +453,4 @@ document.addEventListener('DOMContentLoaded', function() {
 // Exportar para uso global
 window.SantanderBIAPI = SantanderBIAPI;
 window.api = api;
+window.selecionarClienteDropdown = selecionarClienteDropdown;

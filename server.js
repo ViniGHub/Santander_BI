@@ -22,7 +22,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Rota para buscar todos os clientes
 app.get('/api/clientes', (req, res) => {
-  const sql = `SELECT * FROM ID ORDER BY ID`;
+  const sql = `SELECT DISTINCT * FROM ID ORDER BY ID`;
   
   db.all(sql, [], (err, rows) => {
     if (err) {

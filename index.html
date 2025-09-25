@@ -331,12 +331,16 @@
             <i class="fas fa-search"></i> Buscar Cliente
           </h3>
           <div class="search-container">
-            <input 
-              type="text" 
-              id="clienteSearch" 
-              placeholder="Digite o ID do cliente..." 
-              class="search-input"
-            />
+            <div class="search-input-wrapper">
+              <input 
+                type="text" 
+                id="clienteSearch" 
+                placeholder="Digite o ID do cliente ou comece a digitar para filtrar..." 
+                class="search-input"
+                autocomplete="off"
+              />
+              <div id="clientesDropdown" class="clientes-dropdown" style="display: none;"></div>
+            </div>
             <button id="searchClienteBtn" class="search-button">
               <i class="fas fa-search"></i> Buscar
             </button>
