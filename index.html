@@ -382,6 +382,75 @@
       </div>
     </div>
 
+    <!-- Botão para abrir o chat -->
+    <button id="openChatBtn" style="position:fixed;bottom:30px;right:30px;z-index:9999;background:#d50000;color:#fff;border:none;border-radius:50px;padding:18px 28px;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.15);cursor:pointer;">
+      <i class="fas fa-comments"></i> Falar com o Chat
+    </button>
+
+    <!-- Modal do Chat -->
+    <div id="chatModal" style="display:none;position:fixed;bottom:90px;right:30px;width:350px;max-width:95vw;height:480px;max-height:90vh;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.18);z-index:10000;flex-direction:column;overflow:hidden;">
+      <div style="background:#d50000;color:#fff;padding:14px 18px;font-size:18px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;">
+        <span>Assistente Santander BI</span>
+        <button id="closeChatBtn" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;">&times;</button>
+      </div>
+      <div id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;background:#fafafa;font-size:15px;"></div>
+      <div style="padding:12px 16px;border-top:1px solid #eee;display:flex;gap:8px;">
+        <input id="chatInput" type="text" placeholder="Digite sua pergunta..." style="flex:1;padding:10px;border-radius:6px;border:1px solid #ccc;font-size:15px;">
+        <button id="sendChatBtn" style="background:#d50000;color:#fff;border:none;border-radius:6px;padding:0 16px;font-size:16px;cursor:pointer;">Enviar</button>
+      </div>
+    </div>
+
+    <script>
+      // Abrir/fechar modal
+      const openBtn = document.getElementById('openChatBtn');
+      const chatModal = document.getElementById('chatModal');
+      const closeBtn = document.getElementById('closeChatBtn');
+      openBtn.onclick = () => { chatModal.style.display = 'flex'; document.getElementById('chatInput').focus(); };
+      closeBtn.onclick = () => { chatModal.style.display = 'none'; };
+
+      // Mensagens
+      const chatMessages = document.getElementById('chatMessages');
+      function addMsg(text, sender) {
+        const div = document.createElement('div');
+        div.style.margin = '8px 0';
+        div.style.padding = '8px 12px';
+        div.style.borderRadius = '7px';
+        div.style.maxWidth = '90%';
+        div.style.wordBreak = 'break-word';
+        div.style.background = sender === 'user' ? '#e3f2fd' : '#f1f8e9';
+        div.style.alignSelf = sender === 'user' ? 'flex-end' : 'flex-start';
+        div.textContent = text;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+      // Mensagem inicial
+      addMsg('Olá! Sou a assistente virtual do Santander BI. Como posso ajudar?', 'bot');
+
+      // Enviar mensagem
+      const chatInput = document.getElementById('chatInput');
+      const sendBtn = document.getElementById('sendChatBtn');
+      function sendMessage() {
+        const msg = chatInput.value.trim();
+        if (!msg) return;
+        addMsg(msg, 'user');
+        chatInput.value = '';
+        // Chama API Flask
+        fetch('http://localhost:5000/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          
+          body: JSON.stringify({ pergunta: msg })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) addMsg(data.resposta, 'bot');
+          else addMsg('Erro: ' + (data.error || 'Falha na resposta.'), 'bot');
+        })
+        .catch(() => addMsg('Erro de conexão. Tente novamente.', 'bot'));
+      }
+      sendBtn.onclick = sendMessage;
+      chatInput.onkeypress = e => { if (e.key === 'Enter') sendMessage(); };
+    </script>
     <script src="/js/api-client.js"></script>
     <script src="/js/script.js"></script>
   </body>
